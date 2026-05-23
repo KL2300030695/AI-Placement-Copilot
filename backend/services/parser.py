@@ -62,6 +62,7 @@ def parse_resume_text(text: str) -> Dict[str, Any]:
         r'(?:c?gpa|g\.?p\.?a\.?)\s*(?:of|is|:)?\s*([0-9]\.[0-9]{1,2})',
         r'([0-9]\.[0-9]{1,2})\s*(?:/10)?\s*(?:c?gpa|g\.?p\.?a\.?)',
         r'(?:c?gpa|g\.?p\.?a\.?)\s*(?:of|is|:)?\s*([0-9]{2}(?:\.[0-9]{1,2})?)\s*%', # Percentage case: e.g. 85%
+        r'([6-9][0-9](?:\.[0-9]{1,2})?)\s*%', # Standalone percentage case: e.g. 85%
     ]
     for pattern in gpa_patterns:
         match = re.search(pattern, text, re.IGNORECASE)

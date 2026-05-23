@@ -1,7 +1,7 @@
 import numpy as np
 import logging
 import re
-
+import os
 
 logger = logging.getLogger("PlacementCopilot.nlp")
 
@@ -10,25 +10,34 @@ class NLPEngine:
         self.model = None
         self.tfidf_vectorizer = None
         
-        # Attempt to load SentenceTransformer for high-quality semantic similarity
-        try:
-            from sentence_transformers import SentenceTransformer
-            # Using a very lightweight but highly capable model
-            self.model = SentenceTransformer('all-MiniLM-L6-v2')
-            logger.info("SentenceTransformer ('all-MiniLM-L6-v2') loaded successfully.")
-        except Exception as e:
-            logger.warning(
-                f"Failed to load SentenceTransformer ({e}). Falling back to scikit-learn TF-IDF engine."
-            )
-            self._setup_tfidf()
+        # Check if transformer model is explicitly requested in env
+        # By default, use local TF-IDF vectorizer (instant startup, offline friendly)
+        self.use_transformers = os.getenv("USE_TRANSFORMERS", "false").lower() == "true"
+        
+        self._setup_tfidf()
+        
+        if self.use_transformers:
+            self._load_transformers()
 
     def _setup_tfidf(self):
         try:
             from sklearn.feature_extraction.text import TfidfVectorizer
             self.tfidf_vectorizer = TfidfVectorizer(stop_words='english', ngram_range=(1, 2))
-            logger.info("TF-IDF Vectorizer initialized as fallback.")
+            logger.info("TF-IDF Vectorizer initialized successfully (Offline Match Engine).")
         except Exception as e:
-            logger.critical(f"Failed to load sklearn TfidfVectorizer: {e}. Similiarities will default to keyword overlap.")
+            logger.critical(f"Failed to load sklearn TfidfVectorizer: {e}. Similarities will default to keyword overlap.")
+
+    def _load_transformers(self):
+        try:
+            from sentence_transformers import SentenceTransformer
+            logger.info("Loading SentenceTransformer ('all-MiniLM-L6-v2') in background...")
+            self.model = SentenceTransformer('all-MiniLM-L6-v2')
+            logger.info("SentenceTransformer loaded successfully.")
+        except Exception as e:
+            logger.warning(
+                f"Failed to load SentenceTransformer ({e}). Using TF-IDF engine."
+            )
+            self.model = None
 
     def calculate_similarity(self, text1: str, text2: str) -> float:
         """
@@ -38,7 +47,7 @@ class NLPEngine:
         if not text1 or not text2:
             return 0.0
 
-        # Try SentenceTransformer embedding cosine similarity
+        # Try SentenceTransformer embedding cosine similarity if loaded
         if self.model:
             try:
                 embeddings = self.model.encode([text1, text2])
@@ -50,10 +59,11 @@ class NLPEngine:
             except Exception as e:
                 logger.error(f"Error during SentenceTransformer match: {e}. Falling back to TF-IDF.")
         
-        # Try TF-IDF cosine similarity fallback
+        # Try TF-IDF cosine similarity
         if self.tfidf_vectorizer:
             try:
                 from sklearn.metrics.pairwise import cosine_similarity
+                # Fit transform both texts
                 tfidf_matrix = self.tfidf_vectorizer.fit_transform([text1, text2])
                 similarity = float(cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])[0][0])
                 return similarity
